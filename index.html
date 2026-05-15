@@ -3,19 +3,19 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>牌照簡訊整理工具｜逗號置中版</title>
+<title>牌照簡訊整理工具</title>
 <style>
   body{font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#222}
   .wrap{max-width:920px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 8px 26px rgba(0,0,0,.08)}
-  h1{margin:0 0 10px;font-size:26px}
-  .hint{line-height:1.7;color:#555;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px}
-  .warn{line-height:1.7;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-top:12px}
-  .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0}
-  input[type=file]{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff}
-  button{border:0;border-radius:9px;padding:11px 16px;background:#2563eb;color:#fff;font-size:16px;cursor:pointer}
+  h1{margin:0 0 18px;font-size:30px}
+  .hint{line-height:1.7;color:#444;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:16px 18px;font-size:18px}
+  .row{display:flex;gap:16px;flex-wrap:wrap;align-items:center;margin:24px 0}
+  .filebox{display:flex;align-items:center;gap:10px;border:1px solid #ddd;border-radius:9px;background:#fff;padding:10px 14px;min-width:330px}
+  input[type=file]{font-size:16px;max-width:300px}
+  button{border:0;border-radius:9px;padding:12px 20px;background:#2563eb;color:#fff;font-size:18px;cursor:pointer}
   button.secondary{background:#059669}
   button:disabled{background:#aaa;cursor:not-allowed}
-  select{padding:10px;border:1px solid #ddd;border-radius:8px;font-size:16px}
+  select{padding:12px 18px;border:1px solid #ddd;border-radius:9px;font-size:18px;background:#fff;min-width:260px}
   #log{white-space:pre-wrap;background:#111827;color:#d1fae5;border-radius:10px;padding:14px;min-height:120px;line-height:1.5;font-family:Consolas,monospace}
   table{border-collapse:collapse;width:100%;margin-top:14px}
   th,td{border:1px solid #ddd;padding:6px 8px;text-align:left}
@@ -25,22 +25,20 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>牌照簡訊整理工具｜逗號置中版</h1>
+  <h1>牌照簡訊整理工具</h1>
   <div class="hint">
     選擇原始 Excel 後，可以輸出 <b>XLS</b> 或 <b>CSV ZIP</b>。<br>
     XLS 第一分頁為「總表」，後面依本次應檢日建立每日分頁。<br>
     每日分頁格式：<b>手機號碼</b>、<b>置中的逗號</b>、<b>車牌</b>。<br>
     電話、電話2、電話3 都會偵測；例如 <b>0905369639-3</b> 會整理成 <b>0905-369-639</b>。
   </div>
-  <div class="warn">
-    注意：這版為了讓逗號精準置中，XLS 會使用 Excel 2003 可開啟的 XML 試算表格式。<br>
-    新版 Excel 可能會跳「格式與副檔名不相符」提示；Office 2003 通常可直接開。若你要完全不跳提示，就無法保證 XLS 逗號置中。
-  </div>
 
   <div class="row">
-    <input id="file" type="file" accept=".xls,.xlsx,.csv">
+    <div class="filebox">
+      <input id="file" type="file" accept=".xls,.xlsx,.csv">
+    </div>
     <select id="format">
-      <option value="xls">輸出 XLS（逗號置中）</option>
+      <option value="xls">輸出 XLS</option>
       <option value="csv">輸出 CSV ZIP</option>
     </select>
     <button id="runBtn" onclick="run()">開始整理並下載</button>
@@ -286,7 +284,7 @@ function showPreview(result){
 }
 async function run(){
   if(typeof XLSX === "undefined"){
-    setLog("錯誤：XLSX 套件沒有載入。若公司電腦擋外部網路，這個網頁版需要改成離線內嵌版。");
+    setLog("錯誤：XLSX 套件沒有載入。");
     return;
   }
 
@@ -309,7 +307,7 @@ async function run(){
     const fmt = document.getElementById("format").value;
     if(fmt === "xls"){
       exportXLS(result);
-      log("已下載 XLS。逗號欄位已置中。");
+      log("已下載 XLS。");
     }else{
       await exportCSVZip(result);
       log("已下載 CSV ZIP。");
