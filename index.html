@@ -3,12 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>牌照簡訊整理工具｜真 XLS 版</title>
+<title>牌照簡訊整理工具｜逗號置中版</title>
 <style>
   body{font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#222}
   .wrap{max-width:920px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 8px 26px rgba(0,0,0,.08)}
   h1{margin:0 0 10px;font-size:26px}
   .hint{line-height:1.7;color:#555;background:#f8fafc;border:1px solid #e5e7eb;border-radius:10px;padding:12px 14px}
+  .warn{line-height:1.7;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:12px 14px;margin-top:12px}
   .row{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin:18px 0}
   input[type=file]{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff}
   button{border:0;border-radius:9px;padding:11px 16px;background:#2563eb;color:#fff;font-size:16px;cursor:pointer}
@@ -24,18 +25,22 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>牌照簡訊整理工具｜真 XLS 版</h1>
+  <h1>牌照簡訊整理工具｜逗號置中版</h1>
   <div class="hint">
-    這版輸出的是比較接近 Excel 原生的 <b>.xls</b>，避免「檔案格式與副檔名不相符」警告。<br>
-    第一分頁為「總表」，後面依本次應檢日建立每日分頁。<br>
-    每日分頁格式：<b>手機號碼</b>、<b>,</b>、<b>車牌</b>。B 欄會縮窄，視覺上接近置中。<br>
+    選擇原始 Excel 後，可以輸出 <b>XLS</b> 或 <b>CSV ZIP</b>。<br>
+    XLS 第一分頁為「總表」，後面依本次應檢日建立每日分頁。<br>
+    每日分頁格式：<b>手機號碼</b>、<b>置中的逗號</b>、<b>車牌</b>。<br>
     電話、電話2、電話3 都會偵測；例如 <b>0905369639-3</b> 會整理成 <b>0905-369-639</b>。
+  </div>
+  <div class="warn">
+    注意：這版為了讓逗號精準置中，XLS 會使用 Excel 2003 可開啟的 XML 試算表格式。<br>
+    新版 Excel 可能會跳「格式與副檔名不相符」提示；Office 2003 通常可直接開。若你要完全不跳提示，就無法保證 XLS 逗號置中。
   </div>
 
   <div class="row">
     <input id="file" type="file" accept=".xls,.xlsx,.csv">
     <select id="format">
-      <option value="xls">輸出 XLS（避免格式警告）</option>
+      <option value="xls">輸出 XLS（逗號置中）</option>
       <option value="csv">輸出 CSV ZIP</option>
     </select>
     <button id="runBtn" onclick="run()">開始整理並下載</button>
@@ -71,7 +76,6 @@ function normalizeMobile(value){
   if(digits.startsWith("8869") && digits.length >= 12){
     digits = "0" + digits.slice(3, 12);
   }
-
   if(digits.startsWith("09") && digits.length >= 10){
     digits = digits.slice(0, 10);
   }else if(digits.startsWith("9") && digits.length >= 9){
@@ -79,7 +83,6 @@ function normalizeMobile(value){
   }else{
     return "";
   }
-
   if(!/^09\d{8}$/.test(digits)) return "";
   return digits.slice(0,4) + "-" + digits.slice(4,7) + "-" + digits.slice(7,10);
 }
@@ -87,7 +90,6 @@ function excelDateToYYYYMMDD(v){
   if(v == null || v === "") return "";
   let s = normalizeDigits(v).trim();
   if(/^\d{8}$/.test(s)) return s;
-
   if(/^\d+(\.\d+)?$/.test(s)){
     let n = Number(s);
     if(n > 20000 && n < 80000 && typeof XLSX !== "undefined"){
@@ -95,7 +97,6 @@ function excelDateToYYYYMMDD(v){
       if(date) return String(date.y) + String(date.m).padStart(2,"0") + String(date.d).padStart(2,"0");
     }
   }
-
   let m = s.match(/(\d{4})[\/\-\.年]?(\d{1,2})[\/\-\.月]?(\d{1,2})/);
   if(m) return m[1] + m[2].padStart(2,"0") + m[3].padStart(2,"0");
   return "";
@@ -174,52 +175,73 @@ function collectData(wb){
       skipped.push({row:r+1, reason:"沒有可用手機", plate, phones:phoneCols.map(c=>row[c]).join(" / ")});
     }
   }
-
   const dayNames = Object.keys(byDay).sort((a,b)=>parseInt(a)-parseInt(b));
   return {aoa, wb, byDay, all, dayNames, skipped};
 }
 
-function safeSheetName(name){
-  return String(name).replace(/[\[\]\*\?\/\\:]/g, "").slice(0,31) || "Sheet";
+function xmlEscape(v){
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
 }
-function setNoGrid(ws){
-  ws["!gridlines"] = false;
-  ws["!sheetViews"] = [{showGridLines:false}];
-  return ws;
+function sheetNameXml(name){
+  return xmlEscape(String(name).replace(/[\[\]\*\?\/\\:]/g, "").slice(0,31) || "Sheet");
 }
-function makeDailySheet(records){
-  const data = records.map(r => [r.mobile, ",", r.plate]);
-  const ws = XLSX.utils.aoa_to_sheet(data);
-  ws["!cols"] = [{wch:16},{wch:3},{wch:12}];
-
-  // 社群版 SheetJS 對舊 xls 的樣式支援有限，但保留設定，能吃到就置中
-  for(let i=0; i<records.length; i++){
-    const cell = ws["B" + (i+1)];
-    if(cell){
-      cell.s = {alignment:{horizontal:"center", vertical:"center"}};
-    }
+function worksheetXml(name, rows, widths, daily){
+  let cols = "";
+  if(widths && widths.length){
+    cols = widths.map(w => `<Column ss:Width="${w}"/>`).join("");
   }
-  return setNoGrid(ws);
-}
-function makeTotalSheet(result){
-  const ws = XLSX.utils.aoa_to_sheet(result.aoa);
-  ws["!cols"] = [{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
-  return setNoGrid(ws);
+  const rowXml = rows.map(row => {
+    const cells = row.map((v, idx) => {
+      const style = daily && idx === 1 ? ' ss:StyleID="CommaCenter"' : '';
+      return `<Cell${style}><Data ss:Type="String">${xmlEscape(v)}</Data></Cell>`;
+    }).join("");
+    return `<Row>${cells}</Row>`;
+  }).join("");
+
+  return `<Worksheet ss:Name="${sheetNameXml(name)}">
+<Table>${cols}${rowXml}</Table>
+<WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel">
+<DoNotDisplayGridlines/>
+</WorksheetOptions>
+</Worksheet>`;
 }
 function exportXLS(result){
-  const out = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(out, makeTotalSheet(result), "總表");
+  const totalRows = result.aoa.map(row => (row || []).map(v => String(v ?? "")));
+
+  let worksheets = "";
+  worksheets += worksheetXml("總表", totalRows, [85,95,95,95,95,95,95,95], false);
 
   for(const day of result.dayNames){
-    XLSX.utils.book_append_sheet(out, makeDailySheet(result.byDay[day]), safeSheetName(day));
+    const rows = result.byDay[day].map(r => [r.mobile, ",", r.plate]);
+    worksheets += worksheetXml(day, rows, [105,28,90], true);
   }
 
-  out.Workbook = out.Workbook || {};
-  out.Workbook.Views = [{showGridLines:false}];
+  const xml = `<?xml version="1.0"?>
+<?mso-application progid="Excel.Sheet"?>
+<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:o="urn:schemas-microsoft-com:office:office"
+ xmlns:x="urn:schemas-microsoft-com:office:excel"
+ xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet"
+ xmlns:html="http://www.w3.org/TR/REC-html40">
+<Styles>
+<Style ss:ID="Default" ss:Name="Normal">
+<Alignment ss:Vertical="Center"/>
+<Font ss:FontName="Arial" ss:Size="11"/>
+</Style>
+<Style ss:ID="CommaCenter">
+<Alignment ss:Horizontal="Center" ss:Vertical="Center"/>
+<Font ss:FontName="Arial" ss:Size="11"/>
+</Style>
+</Styles>
+${worksheets}
+</Workbook>`;
 
-  const wbout = XLSX.write(out, {bookType:"xls", type:"array", cellStyles:true});
   const base = sourceFileName.replace(/\.[^.]+$/, "");
-  downloadBlob(new Blob([wbout], {type:"application/vnd.ms-excel"}), base + "_已整理.xls");
+  downloadBlob(new Blob(["\ufeff" + xml], {type:"application/vnd.ms-excel;charset=utf-8"}), base + "_已整理.xls");
 }
 
 function csvEscape(v){
@@ -287,7 +309,7 @@ async function run(){
     const fmt = document.getElementById("format").value;
     if(fmt === "xls"){
       exportXLS(result);
-      log("已下載真 XLS。");
+      log("已下載 XLS。逗號欄位已置中。");
     }else{
       await exportCSVZip(result);
       log("已下載 CSV ZIP。");
