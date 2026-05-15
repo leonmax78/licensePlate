@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>牌照簡訊整理工具｜網頁版</title>
+<title>牌照簡訊整理工具｜真 XLS 版</title>
 <style>
   body{font-family:"Microsoft JhengHei",Arial,sans-serif;background:#f5f7fb;margin:0;padding:24px;color:#222}
   .wrap{max-width:920px;margin:auto;background:#fff;border-radius:14px;padding:24px;box-shadow:0 8px 26px rgba(0,0,0,.08)}
@@ -24,18 +24,18 @@
 </head>
 <body>
 <div class="wrap">
-  <h1>牌照簡訊整理工具｜網頁版</h1>
+  <h1>牌照簡訊整理工具｜真 XLS 版</h1>
   <div class="hint">
-    不用安裝、不用 EXE。選擇原始 Excel 後，可以輸出 <b>XLS</b> 或 <b>CSV ZIP</b>。<br>
-    XLS 第一個分頁為「總表」；後面依本次應檢日建立每日分頁。<br>
-    每日分頁格式為：<b>手機號碼</b>、<b>置中的逗號</b>、<b>車牌</b>。<br>
-    電話、電話2、電話3 都會偵測，只輸出手機號碼；例如 <b>0905369639-3</b> 會整理成 <b>0905-369-639</b>。
+    這版輸出的是比較接近 Excel 原生的 <b>.xls</b>，避免「檔案格式與副檔名不相符」警告。<br>
+    第一分頁為「總表」，後面依本次應檢日建立每日分頁。<br>
+    每日分頁格式：<b>手機號碼</b>、<b>,</b>、<b>車牌</b>。B 欄會縮窄，視覺上接近置中。<br>
+    電話、電話2、電話3 都會偵測；例如 <b>0905369639-3</b> 會整理成 <b>0905-369-639</b>。
   </div>
 
   <div class="row">
     <input id="file" type="file" accept=".xls,.xlsx,.csv">
     <select id="format">
-      <option value="xls">輸出 XLS（Office 2003）</option>
+      <option value="xls">輸出 XLS（避免格式警告）</option>
       <option value="csv">輸出 CSV ZIP</option>
     </select>
     <button id="runBtn" onclick="run()">開始整理並下載</button>
@@ -58,16 +58,28 @@ function clearLog(){ setLog("請先選擇原始檔案。"); document.getElementB
 function normalizeDigits(s){
   return String(s ?? "").replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0)-0xFEE0));
 }
-function normalizePlate(s){ return String(s ?? "").trim().toUpperCase(); }
+function normalizePlate(s){
+  return String(s ?? "").trim().toUpperCase();
+}
 function normalizeMobile(value){
   let s = normalizeDigits(value).trim();
   if(!s) return "";
   if(/[停停用空號作廢不要勿]/.test(s)) return "";
+
   let digits = s.replace(/\D/g, "");
-  if(digits.startsWith("8869") && digits.length >= 12) digits = "0" + digits.slice(3, 12);
-  if(digits.startsWith("09") && digits.length >= 10) digits = digits.slice(0, 10);
-  else if(digits.startsWith("9") && digits.length >= 9) digits = "0" + digits.slice(0, 9);
-  else return "";
+
+  if(digits.startsWith("8869") && digits.length >= 12){
+    digits = "0" + digits.slice(3, 12);
+  }
+
+  if(digits.startsWith("09") && digits.length >= 10){
+    digits = digits.slice(0, 10);
+  }else if(digits.startsWith("9") && digits.length >= 9){
+    digits = "0" + digits.slice(0, 9);
+  }else{
+    return "";
+  }
+
   if(!/^09\d{8}$/.test(digits)) return "";
   return digits.slice(0,4) + "-" + digits.slice(4,7) + "-" + digits.slice(7,10);
 }
@@ -75,6 +87,7 @@ function excelDateToYYYYMMDD(v){
   if(v == null || v === "") return "";
   let s = normalizeDigits(v).trim();
   if(/^\d{8}$/.test(s)) return s;
+
   if(/^\d+(\.\d+)?$/.test(s)){
     let n = Number(s);
     if(n > 20000 && n < 80000 && typeof XLSX !== "undefined"){
@@ -82,6 +95,7 @@ function excelDateToYYYYMMDD(v){
       if(date) return String(date.y) + String(date.m).padStart(2,"0") + String(date.d).padStart(2,"0");
     }
   }
+
   let m = s.match(/(\d{4})[\/\-\.年]?(\d{1,2})[\/\-\.月]?(\d{1,2})/);
   if(m) return m[1] + m[2].padStart(2,"0") + m[3].padStart(2,"0");
   return "";
@@ -91,14 +105,18 @@ function findHeader(aoa){
   for(let r=0; r<maxRows; r++){
     const row = aoa[r] || [];
     const joined = row.map(x => String(x ?? "").trim()).join("|");
-    if(joined.includes("牌照") && joined.includes("電話") && joined.includes("本次應檢")) return r;
+    if(joined.includes("牌照") && joined.includes("電話") && joined.includes("本次應檢")){
+      return r;
+    }
   }
   return 0;
 }
 function findColumn(headers, names){
   for(let i=0;i<headers.length;i++){
     const h = String(headers[i] ?? "").replace(/\s/g,"");
-    for(const n of names){ if(h === n || h.includes(n)) return i; }
+    for(const n of names){
+      if(h === n || h.includes(n)) return i;
+    }
   }
   return -1;
 }
@@ -108,19 +126,36 @@ function collectData(wb){
   const aoa = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, defval:""});
   const headerRow = findHeader(aoa);
   const headers = aoa[headerRow] || [];
+
   const plateCol = findColumn(headers, ["牌照號碼","牌照","車牌"]);
-  const phoneCols = [findColumn(headers, ["電話"]), findColumn(headers, ["電話2"]), findColumn(headers, ["電話3"])]
-    .filter((v, i, a) => v >= 0 && a.indexOf(v) === i);
+  const phoneCols = [
+    findColumn(headers, ["電話"]),
+    findColumn(headers, ["電話2"]),
+    findColumn(headers, ["電話3"])
+  ].filter((v, i, a) => v >= 0 && a.indexOf(v) === i);
   const dateCol = findColumn(headers, ["本次應檢日","應檢日","檢驗日"]);
-  if(plateCol < 0 || phoneCols.length === 0 || dateCol < 0) throw new Error("找不到必要欄位。需要：牌照號碼、電話/電話2/電話3、本次應檢日");
-  const byDay = {}, all = [], skipped = [], seen = new Set();
+
+  if(plateCol < 0 || phoneCols.length === 0 || dateCol < 0){
+    throw new Error("找不到必要欄位。需要：牌照號碼、電話/電話2/電話3、本次應檢日");
+  }
+
+  const byDay = {};
+  const all = [];
+  const skipped = [];
+  const seen = new Set();
+
   for(let r=headerRow+1; r<aoa.length; r++){
     const row = aoa[r] || [];
     const plate = normalizePlate(row[plateCol]);
     const ymd = excelDateToYYYYMMDD(row[dateCol]);
     if(!plate && !ymd) continue;
+
     const day = ymd && ymd.length >= 8 ? String(Number(ymd.slice(-2))) + "日" : "";
-    if(!plate || !day){ skipped.push({row:r+1, reason:"缺車牌或日期", plate, date:row[dateCol]}); continue; }
+    if(!plate || !day){
+      skipped.push({row:r+1, reason:"缺車牌或日期", plate, date:row[dateCol]});
+      continue;
+    }
+
     let found = 0;
     for(const c of phoneCols){
       const mobile = normalizeMobile(row[c]);
@@ -128,85 +163,141 @@ function collectData(wb){
       const key = day + "|" + mobile + "|" + plate;
       if(seen.has(key)) continue;
       seen.add(key);
+
       const rec = {day, mobile, plate, sourceRow:r+1};
       if(!byDay[day]) byDay[day] = [];
-      byDay[day].push(rec); all.push(rec); found++;
+      byDay[day].push(rec);
+      all.push(rec);
+      found++;
     }
-    if(found === 0) skipped.push({row:r+1, reason:"沒有可用手機", plate, phones:phoneCols.map(c=>row[c]).join(" / ")});
+    if(found === 0){
+      skipped.push({row:r+1, reason:"沒有可用手機", plate, phones:phoneCols.map(c=>row[c]).join(" / ")});
+    }
   }
+
   const dayNames = Object.keys(byDay).sort((a,b)=>parseInt(a)-parseInt(b));
   return {aoa, wb, byDay, all, dayNames, skipped};
 }
-function xmlEscape(v){
-  return String(v ?? "").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+
+function safeSheetName(name){
+  return String(name).replace(/[\[\]\*\?\/\\:]/g, "").slice(0,31) || "Sheet";
 }
-function sheetNameXml(name){ return xmlEscape(String(name).replace(/[\[\]\*\?\/\\:]/g, "").slice(0,31) || "Sheet"); }
-function worksheetXml(name, rows, widths, daily){
-  let cols = (widths || []).map(w => `<Column ss:Width="${w}"/>`).join("");
-  const rowXml = rows.map(row => {
-    const cells = row.map((v, idx) => {
-      const style = daily && idx === 1 ? ' ss:StyleID="CommaCenter"' : '';
-      return `<Cell${style}><Data ss:Type="String">${xmlEscape(v)}</Data></Cell>`;
-    }).join("");
-    return `<Row>${cells}</Row>`;
-  }).join("");
-  return `<Worksheet ss:Name="${sheetNameXml(name)}"><Table>${cols}${rowXml}</Table><WorksheetOptions xmlns="urn:schemas-microsoft-com:office:excel"><DoNotDisplayGridlines/></WorksheetOptions></Worksheet>`;
+function setNoGrid(ws){
+  ws["!gridlines"] = false;
+  ws["!sheetViews"] = [{showGridLines:false}];
+  return ws;
+}
+function makeDailySheet(records){
+  const data = records.map(r => [r.mobile, ",", r.plate]);
+  const ws = XLSX.utils.aoa_to_sheet(data);
+  ws["!cols"] = [{wch:16},{wch:3},{wch:12}];
+
+  // 社群版 SheetJS 對舊 xls 的樣式支援有限，但保留設定，能吃到就置中
+  for(let i=0; i<records.length; i++){
+    const cell = ws["B" + (i+1)];
+    if(cell){
+      cell.s = {alignment:{horizontal:"center", vertical:"center"}};
+    }
+  }
+  return setNoGrid(ws);
+}
+function makeTotalSheet(result){
+  const ws = XLSX.utils.aoa_to_sheet(result.aoa);
+  ws["!cols"] = [{wch:12},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14},{wch:14}];
+  return setNoGrid(ws);
 }
 function exportXLS(result){
-  const totalRows = result.aoa.map(row => (row || []).map(v => String(v ?? "")));
-  let worksheets = "";
-  worksheets += worksheetXml("總表", totalRows, [80,90,90,90,90,90,90,90], false);
+  const out = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(out, makeTotalSheet(result), "總表");
+
   for(const day of result.dayNames){
-    const rows = result.byDay[day].map(r => [r.mobile, ",", r.plate]);
-    worksheets += worksheetXml(day, rows, [105,26,86], true);
+    XLSX.utils.book_append_sheet(out, makeDailySheet(result.byDay[day]), safeSheetName(day));
   }
-  const xml = `<?xml version="1.0"?>\n<?mso-application progid="Excel.Sheet"?>\n<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet" xmlns:html="http://www.w3.org/TR/REC-html40"><Styles><Style ss:ID="Default" ss:Name="Normal"><Alignment ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11"/></Style><Style ss:ID="CommaCenter"><Alignment ss:Horizontal="Center" ss:Vertical="Center"/><Font ss:FontName="Arial" ss:Size="11"/></Style></Styles>${worksheets}</Workbook>`;
+
+  out.Workbook = out.Workbook || {};
+  out.Workbook.Views = [{showGridLines:false}];
+
+  const wbout = XLSX.write(out, {bookType:"xls", type:"array", cellStyles:true});
   const base = sourceFileName.replace(/\.[^.]+$/, "");
-  downloadBlob(new Blob(["\ufeff" + xml], {type:"application/vnd.ms-excel;charset=utf-8"}), base + "_已整理.xls");
+  downloadBlob(new Blob([wbout], {type:"application/vnd.ms-excel"}), base + "_已整理.xls");
 }
-function csvEscape(v){ const s = String(v ?? ""); return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g,'""') + '"' : s; }
-function recordsToCSV(records){ return records.map(r => [r.mobile, r.plate].map(csvEscape).join(",")).join("\r\n"); }
+
+function csvEscape(v){
+  const s = String(v ?? "");
+  if(/[",\r\n]/.test(s)) return '"' + s.replace(/"/g,'""') + '"';
+  return s;
+}
+function recordsToCSV(records){
+  return records.map(r => [r.mobile, r.plate].map(csvEscape).join(",")).join("\r\n");
+}
 async function exportCSVZip(result){
   if(typeof JSZip === "undefined") throw new Error("JSZip 載入失敗，無法輸出 CSV ZIP。");
   const zip = new JSZip();
   zip.file("全部.csv", "\ufeff" + recordsToCSV(result.all));
-  for(const day of result.dayNames) zip.file(day + ".csv", "\ufeff" + recordsToCSV(result.byDay[day]));
+  for(const day of result.dayNames){
+    zip.file(day + ".csv", "\ufeff" + recordsToCSV(result.byDay[day]));
+  }
   const blob = await zip.generateAsync({type:"blob"});
   const base = sourceFileName.replace(/\.[^.]+$/, "");
   downloadBlob(blob, base + "_CSV_已整理.zip");
 }
 function downloadBlob(blob, filename){
-  const url = URL.createObjectURL(blob); const a = document.createElement("a");
-  a.href = url; a.download = filename; document.body.appendChild(a); a.click();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
   setTimeout(()=>{ URL.revokeObjectURL(url); a.remove(); }, 300);
 }
 function showPreview(result){
   let html = `<p>完成整理：共 ${result.all.length} 筆手機資料，${result.dayNames.length} 個日期分頁。</p>`;
   html += "<table><tr><th>日期</th><th>筆數</th></tr>";
-  for(const day of result.dayNames) html += `<tr><td>${day}</td><td>${result.byDay[day].length}</td></tr>`;
+  for(const day of result.dayNames){
+    html += `<tr><td>${day}</td><td>${result.byDay[day].length}</td></tr>`;
+  }
   html += "</table>";
-  if(result.skipped.length) html += `<p class="danger">未輸出 ${result.skipped.length} 列，多數是非手機、空號、停用或缺資料。</p>`;
+  if(result.skipped.length){
+    html += `<p class="danger">未輸出 ${result.skipped.length} 列，多數是非手機、空號、停用或缺資料。</p>`;
+  }
   document.getElementById("preview").innerHTML = html;
 }
 async function run(){
-  if(typeof XLSX === "undefined"){ setLog("錯誤：XLSX 套件沒有載入。若公司電腦擋外部網路，這個網頁版需要改成離線內嵌版。"); return; }
+  if(typeof XLSX === "undefined"){
+    setLog("錯誤：XLSX 套件沒有載入。若公司電腦擋外部網路，這個網頁版需要改成離線內嵌版。");
+    return;
+  }
+
   const f = document.getElementById("file").files[0];
   if(!f){ setLog("請先選擇原始 Excel 檔案。"); return; }
+
   sourceFileName = f.name;
   setLog("讀取中：" + f.name);
   document.getElementById("runBtn").disabled = true;
+
   try{
     const buf = await f.arrayBuffer();
     const wb = XLSX.read(buf, {type:"array", cellDates:false, raw:false});
     const result = collectData(wb);
+
     log("找到日期分頁：" + result.dayNames.join("、"));
     log("手機輸出筆數：" + result.all.length);
     showPreview(result);
+
     const fmt = document.getElementById("format").value;
-    if(fmt === "xls"){ exportXLS(result); log("已下載 XLS。逗號欄位已設定置中。"); }
-    else{ await exportCSVZip(result); log("已下載 CSV ZIP。"); }
-  }catch(err){ console.error(err); setLog("錯誤：" + (err && err.message ? err.message : err)); }
-  finally{ document.getElementById("runBtn").disabled = false; }
+    if(fmt === "xls"){
+      exportXLS(result);
+      log("已下載真 XLS。");
+    }else{
+      await exportCSVZip(result);
+      log("已下載 CSV ZIP。");
+    }
+  }catch(err){
+    console.error(err);
+    setLog("錯誤：" + (err && err.message ? err.message : err));
+  }finally{
+    document.getElementById("runBtn").disabled = false;
+  }
 }
 </script>
 </body>
